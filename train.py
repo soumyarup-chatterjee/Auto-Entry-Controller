@@ -26,13 +26,9 @@ import os
 
 # construct the argument parser and parse the arguments
 ap = argparse.ArgumentParser()
-ap.add_argument("-d", "--dataset", required=True,
-	help="path to input dataset")
-ap.add_argument("-p", "--plot", type=str, default="plot.png",
-	help="path to output loss/accuracy plot")
-ap.add_argument("-m", "--model", type=str,
-	default="mask_detector.model",
-	help="path to output face mask detector model")
+ap.add_argument("-d", "--dataset", required = True, help = "path to input dataset")
+ap.add_argument("-p", "--plot", type = str, default = "plot.png", help = "path to output loss/accuracy plot")
+ap.add_argument("-m", "--model", type = str, default="mask_detector.model", help = "path to output face mask detector model")
 args = vars(ap.parse_args())
 
 # initialize the initial learning rate, number of epochs to train for,
