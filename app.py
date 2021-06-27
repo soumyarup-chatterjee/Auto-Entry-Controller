@@ -21,9 +21,9 @@ import serial
 import pyfirmata
 
 ap = argparse.ArgumentParser()
-ap.add_argument("-f", "--face", type=str, default="face_detector", help="path to face detector model directory")
-ap.add_argument("-m", "--model", type=str, default="mask_detector.model", help="path to trained face mask detector model")
-ap.add_argument("-c", "--confidence", type=float, default=0.5, help="minimum probability to filter weak detections")
+ap.add_argument("-f", "--face", type = str, default = "face_detector", help = "path to face detector model directory")
+ap.add_argument("-m", "--model", type = str, default = "mask_detector.model", help = "path to trained face mask detector model")
+ap.add_argument("-c", "--confidence", type = float, default=0.5, help = "minimum probability to filter weak detections")
 args = vars(ap.parse_args())
 
 print("[INFO] loading face detector model...")
@@ -68,44 +68,39 @@ def detect_and_predict_mask(frame, faceNet, maskNet):
 			locs.append((startX, startY, endX, endY))
 
 	if len(faces) > 0:
-		faces = np.array(faces, dtype="float32")
-		preds = maskNet.predict(faces, batch_size=32)
+		faces = np.array(faces, dtype = "float32")
+		preds = maskNet.predict(faces, batch_size = 32)
 	return (locs, preds)
 
 def mask_detect():
-	while(True):
-		print("[INFO] starting video stream...")
-		try:
-			vs = VideoStream(src=0).start()
-		except Exception:
-			print("Could not start video stream")
-			break
-		time.sleep(2.0)
+	print("[INFO] starting video stream...")
+	vs = VideoStream(src = 0).start()
+	time.sleep(2.0)
 
-		labelList = []
-		iterCount = 0
+	labelList = []
+	iterCount = 0
 
-		while(len(labelList) < 30):
-			frame = vs.read()
-			frame = imutils.resize(frame, width=400)
-			iterCount += 1
-			if(iterCount > 50):
-				vs.stop()
-				iterCount = False
-				break
-			(locs, preds) = detect_and_predict_mask(frame, faceNet, maskNet)
-			for (box, pred) in zip(locs, preds):
-				(startX, startY, endX, endY) = box
-				(mask, withoutMask) = pred
-				label = 1 if mask > withoutMask else 0
-				labelList.append(label)
-
+	while(len(labelList) < 30):
+		frame = vs.read()
+		frame = imutils.resize(frame, width=400)
+		iterCount += 1
+		if(iterCount > 50):
 			vs.stop()
-		if(iterCount == False):
-			print("Could not analyze presence of mask.\nPlease bring your face closer to the camera")
-		else:
-			if(labelList.count(0) > (0.8 * 30)): return False
-			else: return True
+			iterCount = False
+			break
+		(locs, preds) = detect_and_predict_mask(frame, faceNet, maskNet)
+		for (box, pred) in zip(locs, preds):
+			(startX, startY, endX, endY) = box
+			(mask, withoutMask) = pred
+			label = 1 if mask > withoutMask else 0
+			labelList.append(label)
+
+		vs.stop()
+	if(iterCount == False):
+		print("Could not analyze presence of mask.\nPlease bring your face closer to the camera")
+	else:
+		if(labelList.count(0) > (0.8 * 30)): return False
+		else: return True
 
 def temp_detect(arduino):
 	tempFloat = []
@@ -130,10 +125,9 @@ def worker():
 		passFlag = False
 		arduino = serial.Serial('/dev/ttyACM0', 9600)
 		temps = temp_detect(arduino)
-		print(temps)
 		objTemp = temps[1]
 		if(abs(temps[0] - temps[1]) > 1):
-			print("Person detected. Scanning...")
+			print("\nPerson detected. Scanning...")
 			print("Temperature Value : " + str(objTemp))
 			if objTemp > 37.5: print("Temperature Check : FAIL")
 			else:
@@ -148,7 +142,7 @@ def worker():
 				print("Result : ALLOWED")
 				arduino.write(bytes("1", "utf-8"))
 			else:
-				print("Result : NOT ALLOWED")
+				print("Result : NOT ALLOWED\n")
 		else:
 			print("No one detected. Waiting...")
 		
