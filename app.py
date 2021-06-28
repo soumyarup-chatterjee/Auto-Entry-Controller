@@ -36,7 +36,18 @@ maskNet = load_model(args["model"])
 
 quitFlag = False
 
-def detect_and_predict_mask(frame, faceNet, maskNet):
+print("[INFO] Starting video stream...")
+try:
+	vs = VideoStream(src = 0).start()
+except Exception:
+	print("[ERROR] Could not start video stream. Exiting...")
+	sys.quit()
+
+time.sleep(1.0)
+
+#----------------------------------------------------------------------------------------------------------------------------
+
+def detect_and_predict_mask(frame, faceNet, maskNet, detectFaceOnly):
 	(h, w) = frame.shape[:2]
 	blob = cv2.dnn.blobFromImage(frame, 1.0, (300, 300),
 		(104.0, 177.0, 123.0))
@@ -67,69 +78,117 @@ def detect_and_predict_mask(frame, faceNet, maskNet):
 			faces.append(face)
 			locs.append((startX, startY, endX, endY))
 
+	if(detectFaceOnly and len(faces) > 0): return True
+	if(detectFaceOnly and len(faces) == 0): return False
+
 	if len(faces) > 0:
 		faces = np.array(faces, dtype = "float32")
 		preds = maskNet.predict(faces, batch_size = 32)
+	else:
+		return (False, False)
 	return (locs, preds)
 
-def mask_detect():
-	print("[INFO] starting video stream...")
-	vs = VideoStream(src = 0).start()
-	time.sleep(2.0)
+#----------------------------------------------------------------------------------------------------------------------------
 
+def captureFrame():
+	retries = frame = 0
+	passInfo = False
+	while retries < 2:
+		try:
+			frame = vs.read()
+			frame = imutils.resize(frame, width=400)
+		except Exception:
+			print("[ERROR] Could not capture the frame. Retrying...")
+			retries += 1
+			continue
+		passInfo = True
+		break
+	return (frame, passInfo)
+
+#----------------------------------------------------------------------------------------------------------------------------
+
+def faceIsPresent():
+	print("[INFO] Looking for a person")
+	frame, ok = captureFrame()
+	if(ok and detect_and_predict_mask(frame, faceNet, maskNet, True)):
+		return True
+	return False
+
+#----------------------------------------------------------------------------------------------------------------------------
+
+def mask_detect():
 	labelList = []
 	iterCount = 0
 
 	while(len(labelList) < 30):
-		frame = vs.read()
-		frame = imutils.resize(frame, width=400)
 		iterCount += 1
-		if(iterCount > 50):
-			vs.stop()
-			iterCount = False
-			break
-		(locs, preds) = detect_and_predict_mask(frame, faceNet, maskNet)
+		frame, success = captureFrame()
+		if(not success or iterCount > 50):
+			print("[ERROR] Could not analyze presence of mask.")
+			return False
+		(locs, preds) = detect_and_predict_mask(frame, faceNet, maskNet, False)
 		for (box, pred) in zip(locs, preds):
 			(startX, startY, endX, endY) = box
 			(mask, withoutMask) = pred
 			label = 1 if mask > withoutMask else 0
 			labelList.append(label)
 
-		vs.stop()
-	if(iterCount == False):
-		print("Could not analyze presence of mask.\nPlease bring your face closer to the camera")
-	else:
-		if(labelList.count(0) > (0.8 * 30)): return False
-		else: return True
+	if(labelList.count(0) > (0.8 * 30)):
+		return False
+	return True
+
+#----------------------------------------------------------------------------------------------------------------------------
 
 def temp_detect(arduino):
-	tempFloat = []
-	while True:
-		time.sleep(2)
-		data = arduino.readline()
-		try:
-			decodedData = str(data[0:len(data)].decode("utf-8"))
-		except Exception:
-			print("Erroneous sensor value")
-			continue
-		tempVal = decodedData.split('x')
+	time.sleep(1)
+	data = arduino.readline()
 
+	failure, temps = False, []
+	try:
+		decodedData = str(data[0:len(data)].decode("utf-8"))
+		tempVal = decodedData.split('x')
 		for item in tempVal:
-			tempFloat.append(float(item))
-		data = 0
-		break
-	return tempFloat
+			temps.append(float(item))
+	except Exception:
+		print("[ERROR] Erroneous sensor value")
+		failure = True
+
+	if(not failure):
+		return temps
+	return []
+	data = 0
+
+#----------------------------------------------------------------------------------------------------------------------------
 
 def worker():
-	while (not quitFlag):
+	retries = 0
+	while (not quitFlag and retries < 3):
 		passFlag = False
-		arduino = serial.Serial('/dev/ttyACM0', 9600)
+
+		try:
+			arduino = serial.Serial('/dev/ttyACM0', 9600)
+		except Exception:
+			retries += 1
+			print("[ERROR] Connection with Arduino failed. Retrying...")
+			time.sleep(2)
+			continue
+		
+		if retries > 0: print("Connection with Arduino succesfully established")
+		retries = 0
+
+		face_result = faceIsPresent()
 		temps = temp_detect(arduino)
-		objTemp = temps[1]
-		if(abs(temps[0] - temps[1]) > 1):
+		
+		if not temps:
+			retries += 1
+			continue
+		ambTemp, objTemp = [temps[i] for i in (0, 1)]
+
+		if((abs(objTemp - ambTemp) > 1) or face_result):
 			print("\nPerson detected. Scanning...")
 			print("Temperature Value : " + str(objTemp))
-			if objTemp > 37.5: print("Temperature Check : FAIL")
+			if objTemp > 37.5:
+				print("Temperature Check : FAIL")
 			else:
 				print("Temperature Check : PASS")
 				result = mask_detect()
@@ -145,12 +204,18 @@ def worker():
 				print("Result : NOT ALLOWED\n")
 		else:
 			print("No one detected. Waiting...")
-		
 		time.sleep(2)
 
-worker_thread = threading.Thread(target = worker, daemon = True)
+	if retries >= 3:
+		print("Could not connect with the Arduino. Press any key to exit program")
+
+#----------------------------------------------------------------------------------------------------------------------------
+
+worker_thread = threading.Thread(target = worker, daemon = False)
 worker_thread.start()
 ch = input()
 quitFlag = True
 worker_thread.join()
+print("Stopping video stream")
+vs.stop()
 print("Exiting program...")
