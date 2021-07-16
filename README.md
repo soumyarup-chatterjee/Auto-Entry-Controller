@@ -1,3 +1,4 @@
+With the current COVID situation, ensuring safety in public places has become extremely essential.
 The script developed as a part of this project detects the temperature and the presence of a face mask.
 
 Technologies used to achieve said objective include: Convolutional Neural Network using TensorFlow (MobileNetV2), and Arduino.
